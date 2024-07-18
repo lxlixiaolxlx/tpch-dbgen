@@ -78,8 +78,8 @@
 #endif
 
 DSS_HUGE NextRand(DSS_HUGE seed);
-void	permute(long *set, int cnt, long stream);
-void	permute_dist(distribution *d, long stream);
+long *permute(long *set, int cnt, long stream);
+long *permute_dist(distribution *d, long stream);
 long seed;
 char *eol[2] = {" ", "},"};
 extern seed_t Seed[];
@@ -92,47 +92,63 @@ tdef tdefs = { NULL };
 #define ITERATIONS	1000
 #define UNSET	0
 
-void	permute(long *a, int c, long s)
-{
+long *
+permute(long *a, int c, long s)
+	{
     int i;
     static DSS_HUGE source;
     static long *set, temp;
     
 	if (a != (long *)NULL)
-	{
-		for (i=0; i < c; i++)
 		{
-			RANDOM(source, (long)i, (long)(c - 1), s);
+		set = a;
+		for (i=0; i < c; i++)
+			*(a + i) = i;
+		for (i=0; i < c; i++)
+			{
+			RANDOM(source, 0L, (long)(c - 1), s, 0, (long)(c));
 			temp = *(a + source);
 			*(a + source) = *(a + i) ;
 			*(a + i) = temp;
+			source = 0;
+			}
 		}
-	}
+	else
+		source += 1;
 	
-	return;
-}
+	if (source >= c)
+		source -= c;
+	
+	return(set + source);
+	}
 
-void	permute_dist(distribution *d, long stream)
-{
+long *
+permute_dist(distribution *d, long stream)
+	{
 	static distribution *dist = NULL;
 	int i;
 	
 	if (d != NULL)
-	{
-		if (d->permute == (long *)NULL)
 		{
+		if (d->permute == (long *)NULL)
+			{
 			d->permute = (long *)malloc(sizeof(long) * DIST_SIZE(d));
 			MALLOC_CHECK(d->permute);
+			for (i=0; i < DIST_SIZE(d); i++) 
+				*(d->permute + i) = i;
+			}
+		dist = d;
+		return(permute(dist->permute, DIST_SIZE(dist), stream));
 		}
-		for (i=0; i < DIST_SIZE(d); i++) 
-			*(d->permute + i) = i;
-		permute(d->permute, DIST_SIZE(d), stream);
-	}
+	
+	
+	if (dist != NULL)
+		return(permute(NULL, DIST_SIZE(dist), stream));
 	else
 		INTERNAL_ERROR("Bad call to permute_dist");	
 
-	return;
-}
+      return(NULL);
+	}
 
 
 #ifdef TEST

@@ -39,7 +39,6 @@
 *
 *
 */
-#include "config.h"
 #include <stdio.h>
 #ifndef _POSIX_SOURCE
 #include <malloc.h>
@@ -55,13 +54,14 @@
 #include "adhoc.h"
 extern adhoc_t adhocs[];
 #endif /* ADHOC */
-void	permute(long *a, int c, long s);
+
 #define MAX_PARAM	10		/* maximum number of parameter substitutions in a query */
 
 extern long Seed[];
 extern char **asc_date;
 extern double flt_scale;
 extern distribution q13a, q13b;
+long *permute(long *set, int cnt, long stream);
 
 long brands[25] = {11,12,13,14,15,21,22,23,24,25,31,32,33,34,35,
 			41,42,43,44,45,51,52,53,54,55};
@@ -156,7 +156,7 @@ varsub(int qnum, int vnum, int flags)
 				sprintf(param[1], HUGE_FORMAT,
 					UnifInt((DSS_HUGE)P_SIZE_MIN, (DSS_HUGE)P_SIZE_MAX, qnum));
 				pick_str(&p_types_set, qnum, param[3]);
-				ptr = param[3] + (int)strlen(param[3]);
+				ptr = param[3] + strlen(param[3]);
 				while (*(ptr - 1) != ' ') ptr--;
 				strcpy(param[2], ptr);
 				pick_str(&regions, qnum, param[3]);
@@ -169,7 +169,7 @@ varsub(int qnum, int vnum, int flags)
 				* appropriate magic numbers to position the output functions 
 				* at the start of March '95
 				*/
-            RANDOM(tmp_date, 0, 30, qnum);
+            			RANDOM(tmp_date, 0, 30, qnum, 0, 30);
 				strcpy(param[2], *(asc_date + tmp_date + 1155));
 				param[3][0] = '\0';
 				break;
@@ -249,14 +249,16 @@ varsub(int qnum, int vnum, int flags)
 				tmp2 = UnifInt((DSS_HUGE)1, (DSS_HUGE)5, qnum);
 				sprintf(param[1], formats[16], tmp1, tmp2);
 				pick_str(&p_types_set, qnum, param[2]);
-				ptr = param[2] + (int)strlen(param[2]);
+				ptr = param[2] + strlen(param[2]);
 				while (*(--ptr) != ' ');
 				*ptr = '\0';
 				lptr = &sizes[0];
-				permute(lptr,50,qnum);
 				for (i=3; i <= MAX_PARAM; i++)
-					sprintf(param[i], "%ld", sizes[i - 3]);
-				break;
+				{
+					sprintf(param[i], "%ld", *permute(lptr,50,qnum) + 1);
+					lptr = (long *)NULL;
+				}
+					break;
 			case 17:
 				tmp1 = UnifInt((DSS_HUGE)1, (DSS_HUGE)5, qnum); 
 				tmp2 = UnifInt((DSS_HUGE)1, (DSS_HUGE)5, qnum);
@@ -296,9 +298,11 @@ varsub(int qnum, int vnum, int flags)
 				break;
 			case 22:
 				lptr = &ccode[0];
-				permute(lptr,25, qnum);
 				for (i=0; i <= 7; i++)
-					sprintf(param[i+1], "%ld", 10 + ccode[i]);
+				{
+					sprintf(param[i+1], "%ld", 10 + *permute(lptr,25, qnum));
+					lptr = (long *)NULL;
+				}
 				param[8][0] = '\0';
 				break;
 			case 23:

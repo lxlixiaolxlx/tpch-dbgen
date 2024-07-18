@@ -91,6 +91,12 @@
 #include "dss.h"
 #include "dsstypes.h"
 
+/*
+ *  Extensions to dbgen for generation of skewed data.
+ */
+extern double skew;
+
+
 /* 
  * txt_vp() -- 
  *		generate a verb phrase by
@@ -110,11 +116,11 @@ txt_vp(char *dest, int sd)
 		*cptr,
 		*parse_target;
 	distribution *src;
-	int i,
-		res = 0;
+	int i, res = 0;
 
 	
 	pick_str(&vp, sd, &syntax[0]);
+
 	parse_target = syntax;
 	while ((cptr = strtok(parse_target, " ")) != NULL)
 	{
@@ -131,8 +137,9 @@ txt_vp(char *dest, int sd)
 			src = &auxillaries;
 			break;
 		}	/* end of POS switch statement */
+
 		i = pick_str(src, sd, dest);
-		i = (int)strlen(DIST_MEMBER(src, i));
+		i = strlen(DIST_MEMBER(src, i));
 		dest += i;
 		res += i;
 		if (*(++cptr))	/* miscelaneous fillagree, like punctuation */
@@ -194,7 +201,7 @@ txt_np(char *dest, int sd)
 			break;
 		}	/* end of POS switch statement */
 		i = pick_str(src, sd, dest);
-		i = (int)strlen(DIST_MEMBER(src, i));
+		i = strlen(DIST_MEMBER(src, i));
 		dest += i;
 		res += i;
 		if (*(++cptr))	/* miscelaneous fillagree, like punctuation */
@@ -252,14 +259,14 @@ next_token:	/* I hate goto's, but can't seem to have parent and child use strtok
 			break;
 		case 'P':
 			i = pick_str(&prepositions, sd, dest);
-			len = (int)strlen(DIST_MEMBER(&prepositions, i));
+			len = strlen(DIST_MEMBER(&prepositions, i));
 			strcpy((dest + len), " the ");
 			len += 5;
 			len += txt_np(dest + len, sd);
 			break;
 		case 'T':
 			i = pick_str(&terminators, sd, --dest); /*terminators should abut previous word */
-			len = (int)strlen(DIST_MEMBER(&terminators, i));
+			len = strlen(DIST_MEMBER(&terminators, i));
 			break;
 		}	/* end of POS switch statement */
 		dest += len;
@@ -274,13 +281,14 @@ next_token:	/* I hate goto's, but can't seem to have parent and child use strtok
 		goto next_token;
 done:
 	*dest = '\0';
+
 	return(--res);
 }
 
 /*
  * dbg_text() -- 
- *		produce ELIZA-like text of random, bounded length, truncating the last 
- *		generated sentence as required
+ * produce ELIZA-like text of random, bounded length, truncating the last 
+ * generated sentence as required
  */
 void
 dbg_text(char *tgt, int min, int max, int sd)
@@ -296,15 +304,19 @@ dbg_text(char *tgt, int min, int max, int sd)
    static int bInit = 0;
    int nLifeNoise = 0;
    
+   // Here we are building sentenses => should not use zipf
+   double oldSkew = skew;
+   skew = 0;
+   
    if (!bInit)
    {
       cp = &szTextPool[0];
-      if (verbose > 0)
+      if (verbose)
          fprintf(stderr, "\nPreloading text ... ");
       
       while (wordlen < TEXT_POOL_SIZE)
       {
-         if ((verbose > 0) && (wordlen > nLifeNoise))
+         if (verbose && (wordlen > nLifeNoise))
          {
             nLifeNoise += 200000;
             fprintf(stderr, "%3.0f%%\b\b\b\b", (100.0 * wordlen)/TEXT_POOL_SIZE);
@@ -331,16 +343,19 @@ dbg_text(char *tgt, int min, int max, int sd)
       }
       *cp = '\0';
       bInit = 1;
-      if (verbose > 0)
+      if (verbose)
          fprintf(stderr, "\n");
    }
 
-   RANDOM(hgOffset, 0, TEXT_POOL_SIZE - max, sd);
-   RANDOM(hgLength, min, max, sd);
+   RANDOM(hgOffset, 0, TEXT_POOL_SIZE - max, sd, skew, TEXT_POOL_SIZE - max + 1);
+   RANDOM(hgLength, min, max, sd, skew, max - min + 1);
    strncpy(&tgt[0], &szTextPool[hgOffset], (int)hgLength);
    tgt[hgLength] = '\0';
+  
+   // Reset skew to its original value
+   skew = oldSkew;
 
-	return;
+   return;
 }
 
 #ifdef TEXT_TEST

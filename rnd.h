@@ -70,7 +70,7 @@ seed_t     Seed[MAX_STREAM + 1] =
     {ORDER,  1227283347, 0, 1},				    /* O_SUPP_SD    10 */
     {ORDER,  1171034773, 0, 1},					/* O_CLRK_SD    11 */
     {ORDER,  276090261,  0, 2},  /* O_CMNT_SD    12 */
-	{ORDER,  1066728069, 0, 1},					/* O_ODATE_SD   13 */
+    {ORDER,  1066728069, 0, 1},					/* O_ODATE_SD   13 */
     {LINE,   209208115,  0, O_LCNT_MAX},        /* L_QTY_SD     14 */
     {LINE,   554590007,  0, O_LCNT_MAX},        /* L_DCNT_SD    15 */
     {LINE,   721958466,  0, O_LCNT_MAX},        /* L_TAX_SD     16 */
@@ -106,3 +106,32 @@ seed_t     Seed[MAX_STREAM + 1] =
     {SUPP,   202794285,  0, 1},      /* BBB comment  46 */
     {SUPP,   715851524,  0, 1}       /* BBB junk     47 */
 };
+
+
+/*
+ *  Extensions to dbgen for generation of skewed data.
+ */
+
+/*
+ *  For Zipfian distribution, we need to know:
+ *  (a) what the current value being generated for this column is
+ *  (b) how many distinct values have been generated so far for this column
+ *  (c) how many copies of the current value must be generated.
+ *  (d) how many copies of the current value have been generated thus far.
+ *  (e) skew value being used for a column (only if user chose mixed distr.)
+ *  (f) multiplier for each stream.
+ * (note: Global, hence initialized to 0)
+ */
+long     CurrentValue[MAX_STREAM + 1];
+long     NumDistinctValuesGenerated[MAX_STREAM + 1];
+long     CurrentValueTarget[MAX_STREAM + 1];
+long     CurrentValueCounter[MAX_STREAM + 1];
+double	 ColumnSkewValue[MAX_STREAM + 1];
+double   Multiplier[MAX_STREAM + 1];
+
+/* New function prototypes */
+DSS_HUGE SkewInt(DSS_HUGE nLow, DSS_HUGE nHigh, long nStream, double skewVal, long n);
+DSS_HUGE SkewIntCount(long nStream, double skewVal, long n);
+double   round(double x);
+double   SolveForMultipler(long n, double zipf);
+double   GetMultiplier(long n, double zipf);

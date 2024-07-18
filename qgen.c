@@ -70,7 +70,6 @@ long rndm;
 double flt_scale;
 distribution q13a, q13b;
 int qnum;
-char *db_name = NULL;
 
 
 /*
@@ -301,7 +300,7 @@ process_options(int cnt, char **args)
                 flags |= ANSI;
                 break;
 			case 'b':               /* load distributions from named file */
-				d_path = (char *)malloc((int)strlen(optarg) + 1);
+				d_path = (char *)malloc(strlen(optarg) + 1);
 				MALLOC_CHECK(d_path);
 				strcpy(d_path, optarg);
 				break;
@@ -316,13 +315,13 @@ process_options(int cnt, char **args)
                 exit(0);
                 break;
             case 'i':   /* set stream initialization file name */
-                ifile = malloc((int)strlen(optarg) + 1);
+                ifile = malloc(strlen(optarg) + 1);
                 MALLOC_CHECK(ifile);
                 strcpy(ifile, optarg);
                 flags |= INIT;
                 break;
             case 'l':   /* log parameter usages */
-                lfile = malloc((int)strlen(optarg) + 1);
+                lfile = malloc(strlen(optarg) + 1);
                 MALLOC_CHECK(lfile);
                 strcpy(lfile, optarg);
                 flags |= LOG;
@@ -331,13 +330,13 @@ process_options(int cnt, char **args)
                 flags |= DFLT_NUM;
                 break;
             case 'n':   /* set database name */
-                db_name = malloc((int)strlen(optarg) + 1);
+                db_name = malloc(strlen(optarg) + 1);
                 MALLOC_CHECK(db_name);
                 strcpy(db_name, optarg);
                 flags |= DBASE;
                 break;
             case 'o':   /* set the output path */
-                osuff = malloc((int)strlen(optarg) + 1);
+                osuff = malloc(strlen(optarg) + 1);
                 MALLOC_CHECK(osuff);
                 strcpy(osuff, optarg);
                 flags |=OUTPUT;
@@ -359,7 +358,7 @@ process_options(int cnt, char **args)
 						"Data set integrity is not guaranteed.\n");
                 break;
             case 't':   /* set termination file name */
-                tfile = malloc((int)strlen(optarg) + 1);
+                tfile = malloc(strlen(optarg) + 1);
                 MALLOC_CHECK(tfile);
                 strcpy(tfile, optarg);
                 flags |= TERMINATE;
@@ -405,7 +404,7 @@ setup(void)
 }
 
 
-int main(int ac, char **av)
+main(int ac, char **av)
 {
     int i;
     FILE *ifp;
@@ -426,7 +425,7 @@ int main(int ac, char **av)
     if (!(flags & DFLT))        /* perturb the RNG */
 	    {
 	    if (!(flags & SEED))
-                rndm = (long)((unsigned)time(NULL));
+                rndm = (long)((unsigned)time(NULL) * DSS_PROC);
 		if (rndm < 0)
 			rndm += 2147483647;
 		Seed[0].value = rndm;
@@ -453,14 +452,14 @@ int main(int ac, char **av)
             for (i=optind; i < ac; i++)
                 {
                 char qname[10];
-                sprintf(qname, "%ld", SEQUENCE(snum, atoi(av[i])));
+                sprintf(qname, "%d", SEQUENCE(snum, atoi(av[i])));
                 qsub(qname, flags);
                 }
         else
             for (i=1; i <= QUERIES_PER_SET; i++)
                 {
                 char qname[10];
-                sprintf(qname, "%ld", SEQUENCE(snum, i));
+                sprintf(qname, "%d", SEQUENCE(snum, i));
                 qsub(qname, flags);
                 }
     else

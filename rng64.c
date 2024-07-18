@@ -62,7 +62,7 @@ extern double dM;
 extern seed_t Seed[];
 
 void
-dss_random64(DSS_HUGE *tgt, DSS_HUGE nLow, DSS_HUGE nHigh, long nStream)
+dss_random64(DSS_HUGE *tgt, DSS_HUGE nLow, DSS_HUGE nHigh, long nStream, double skew, long n)
 {
     DSS_HUGE            nTemp;
 

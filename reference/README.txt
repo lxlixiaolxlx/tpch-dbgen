@@ -43,10 +43,10 @@ c. Update Data Validation
   name of one of the tables in the TPCH schema, and <mmm> and <nnn> identify 
   a particular data generation step.
 
-  For each file produced by DBGEN, the first 100 lines of the file should
+  For each file produced by DBGEN, the first 150 lines of the file should
   match the delete.tbl.u<nnn>.<mmm> and <name>.tbl.u<nnn>.<mmm> files found in the
   reference data set. Where the files from the reference data set contain
-  fewer than 100 lines, the file should match in their entriety.
+  fewer than 150 lines, the file should match in their entriety.
 
 d. QGEN Parameter Generation
   The qgen paramter sets are produced using the cmd_qgen_sf<n> files, where

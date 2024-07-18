@@ -114,12 +114,15 @@ static char alpha_num[65] =
 #define PROTO(s) ()
 #endif
 
-#ifndef WIN32
 char     *getenv PROTO((const char *name));
-#endif
 void usage();
 long *permute_dist(distribution *d, long stream);
 extern seed_t Seed[];
+
+/*
+ *  Extensions to dbgen for generation of skewed data.
+ */
+extern double skew;
 
 /*
  * env_config: look for a environmental variable setting and return its
@@ -182,11 +185,11 @@ a_rnd(int min, int max, int column, char *dest)
              len,
              char_int;
 
-   RANDOM(len, min, max, column);
+   RANDOM(len, min, max, column, skew, (max-min+1));
    for (i = 0; i < len; i++)
       {
       if (i % 5 == 0)
-        RANDOM(char_int, 0, MAX_LONG, column);
+        RANDOM(char_int, 0, MAX_LONG, column, 0, (MAX_LONG));
       *(dest + i) = alpha_num[char_int & 077];
       char_int >>= 6;
       }
@@ -208,8 +211,8 @@ e_str(distribution *d, int min, int max, int stream, char *dest)
 
     a_rnd(min, max, stream, dest);
     pick_str(d, stream, strtmp);
-    len = (int)strlen(strtmp);
-    RANDOM(loc, 0, ((int)strlen(dest) - 1 - len), stream);
+    len = strlen(strtmp);
+    RANDOM(loc, 0, (strlen(dest) - 1 - len), stream, skew, (strlen(dest) - len));
     strncpy(dest + loc, strtmp, len);
 
     return;
@@ -227,10 +230,14 @@ pick_str(distribution *s, int c, char *target)
     long      i = 0;
     DSS_HUGE      j;
 
-    RANDOM(j, 1, s->list[s->count - 1].weight, c);
+    RANDOM(j, 1, s->list[s->count - 1].weight, c, 
+    	   skew, s->list[s->count - 1].weight);
+    	   
     while (s->list[i].weight < j)
         i++;
+
     strcpy(target, s->list[i].text);
+
     return(i);
 }
 
@@ -353,7 +360,7 @@ long      weight,
             continue;
             }
         target->list[count].text =
-            (char *) malloc((size_t)((int)strlen(token) + 1));
+            (char *) malloc((size_t)(strlen(token) + 1));
         MALLOC_CHECK(target->list[count].text);
         strcpy(target->list[count].text, token);
         target->max += weight;
@@ -406,6 +413,7 @@ tbl_open(int tbl, char *mode)
             exit(0);
         }
 
+/* ** Inconsistent behaviour while opening files
     if (S_ISFIFO(fstats.st_mode))
         {
         retcode =
@@ -414,7 +422,12 @@ tbl_open(int tbl, char *mode)
         }
     else
         f = fopen(fullpath, mode);
+        */
+
+    f = fopen(fullpath, mode);
     OPEN_CHECK(f, fullpath);
+    if (header && columnar && tdefs[tbl].header != NULL)
+        tdefs[tbl].header(f);
 
     return (f);
 }
@@ -433,13 +446,13 @@ agg_str(distribution *set, long count, long col, char *dest)
 	d = set;
 	*dest = '\0';
 
-	permute_dist(d, col);
 	for (i=0; i < count; i++)
 		{
-		strcat(dest, DIST_MEMBER(set,DIST_PERMUTE(d, i)));
+		strcat(dest, DIST_MEMBER(set,*permute_dist(d, col)));
 		strcat(dest, " ");
+		d = (distribution *)NULL;
 		}
-	*(dest + (int)strlen(dest) - 1) = '\0';
+	*(dest + strlen(dest) - 1) = '\0';
 
     return;
 }
@@ -563,10 +576,12 @@ set_state(int table, long sf, long procs, long step, DSS_HUGE *extra_rows)
     if (sf == 0 || step == 0)
         return(0);
 
-	rowcount = tdefs[table].base;
+	rowcount = tdefs[table].base / procs;
+	if ((sf / procs) > (int)MAX_32B_SCALE)
+		INTERNAL_ERROR("SCALE OVERFLOW. RE-RUN WITH MORE CHILDREN.");
 	rowcount *= sf;
-	*extra_rows = rowcount % procs;
-	rowcount /= procs;
+	remainder = (tdefs[table].base % procs) * sf;
+	rowcount += remainder / procs;
 	result = rowcount;
 	for (i=0; i < step - 1; i++)
 		{
@@ -579,6 +594,7 @@ set_state(int table, long sf, long procs, long step, DSS_HUGE *extra_rows)
 			if (tdefs[table].child != NONE) 
 			tdefs[tdefs[table].child].gen_seed(0,rowcount);
 		}
+	*extra_rows = remainder % procs;
 	if (step > procs)	/* moving to the end to generate updates */
 		tdefs[table].gen_seed(0, *extra_rows);
 

@@ -62,6 +62,7 @@
  *   SET_HANDLER(proc) -- name of routine to handle signals in parallel load
  *   WAIT(res, pid)    -- how to await the termination of a child
  *   SEPARATOR         -- character used to separate fields in flat files
+ *   DBNAME            -- default name of database to be loaded
  *   STDLIB_HAS_GETOPT -- to prevent confilcts with gloabal getopt() 
  *   MDY_DATE          -- generate dates as MM-DD-YY
  *   WIN32             -- support for WindowsNT
@@ -95,7 +96,10 @@
  *   TPCH              -- make will create TPCH (set in makefile)
  */
 
+#define EOL_HANDLING
+
 #ifdef DOS
+#define DSS_PROC        1
 #define PATH_SEP	'\\'
 #else
 
@@ -118,13 +122,6 @@
 #ifdef HP
 #define _INCLUDE_POSIX_SOURCE
 #define STDLIB_HAS_GETOPT
-#define SUPPORT_64BITS
-#define DSS_HUGE long
-#define HUGE_COUNT 2
-#define HUGE_FORMAT "%ld"
-#define HUGE_DATE_FORMAT "%02lld"
-#define RNG_C 1ull
-#define RNG_A 6364136223846793005ull
 #endif /* HP */
 
 #ifdef IBM
@@ -146,18 +143,6 @@
 #define RNG_A	6364136223846793005ull
 #define RNG_C	1ull
 #endif /* LINUX */
-
-#ifdef MAC
-#define _POSIX_C_SOURCE 200112L
-#define _POSIX_SOURCE
-#define STDLIB_HAS_GETOPT
-#define SUPPORT_64BITS
-#define DSS_HUGE long
-#define HUGE_FORMAT	"%ld"
-#define HUGE_DATE_FORMAT	"%02ld"
-#define RNG_A	6364136223846793005ull
-#define RNG_C	1ull
-#endif /* MAC */
 
 #ifdef SUN
 #define STDLIB_HAS_GETOPT
@@ -215,7 +200,12 @@
 #define WAIT(res, pid) wait(res)
 #endif /* DEFAULT */
 
+#define DSS_PROC        getpid()
 #endif /* DOS */
+
+#ifndef DBNAME
+#define DBNAME "dss"
+#endif /* DBNAME */
 
 #ifndef PATH_SEP
 #define PATH_SEP '/'

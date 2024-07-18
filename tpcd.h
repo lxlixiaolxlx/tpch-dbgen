@@ -67,15 +67,6 @@
 #define SET_DBASE       "database %s ;\n"
 #endif
 
-#ifdef ORACLE
-#define GEN_QUERY_PLAN ""
-#define START_TRAN ""
-#define END_TRAN ""
-#define SET_OUTPUT ""
-#define SET_ROWCOUNT "where rownum <= %d;\n"
-#define SET_DBASE ""
-#endif
-
 #ifdef 	SQLSERVER
 #define GEN_QUERY_PLAN  "set showplan on\nset noexec on\ngo\n"
 #define START_TRAN      "begin transaction\ngo\n"
@@ -106,6 +97,7 @@
 #define MAX_VARS      8 /* max number of host vars in any query */
 #define QLEN_MAX   2048 /* max length of any query */
 #define QUERIES_PER_SET 22
+#define MAX_PIDS 50
 
 EXTERN int flags;
 EXTERN int s_cnt;

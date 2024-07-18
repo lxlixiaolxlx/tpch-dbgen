@@ -1,12 +1,9 @@
 /*
-* $Id: speed_seed.c,v 1.9 2009/06/28 14:01:08 jms Exp $
+* $Id: speed_seed.c,v 1.8 2006/08/01 04:13:17 jms Exp $
 *
 * Revision History
 * ===================
 * $Log: speed_seed.c,v $
-* Revision 1.9  2009/06/28 14:01:08  jms
-* bug fix for DOP
-*
 * Revision 1.8  2006/08/01 04:13:17  jms
 * fix parallel generation
 *
@@ -66,9 +63,14 @@ extern seed_t Seed[];
 void fakeVStr(int nAvg, long nSeed, DSS_HUGE nCount);
 void NthElement (DSS_HUGE N, DSS_HUGE *StartSeed);
 
+/*
+ *  Extensions to dbgen for generation of skewed data.
+ */
+extern double skew;
+
 
 void 
-advanceStream(int nStream, DSS_HUGE nCalls, int bUse64Bit)
+advanceStream(int nStream, int nCalls, int bUse64Bit)
 {
    if (bUse64Bit)
       Seed[nStream].value = AdvanceRand64(Seed[nStream].value, nCalls);
@@ -143,7 +145,7 @@ fake_a_rnd(int min, int max, int column)
    DSS_HUGE len;
    DSS_HUGE itcount;
 
-   RANDOM(len, min, max, column);
+   RANDOM(len, min, max, column, skew, (max-min+1));
    if (len % 5L == 0)
       itcount = len/5;
    else 
@@ -178,11 +180,9 @@ sd_line(int child, DSS_HUGE skip_count)
 	for (j=0; j < O_LCNT_MAX; j++)
 	{
 		for (i=L_QTY_SD; i<= L_RFLG_SD; i++)
-/*
 			if (scale >= 30000 && i == L_PKEY_SD)
 				ADVANCE_STREAM64(i, skip_count);
 			else
-*/
 				ADVANCE_STREAM(i, skip_count);
 		ADVANCE_STREAM(L_CMNT_SD, skip_count * 2);
 	}
@@ -201,11 +201,9 @@ long
 sd_order(int child, DSS_HUGE skip_count)        
 {
 	ADVANCE_STREAM(O_LCNT_SD, skip_count);
-/*
 	if (scale >= 30000)
 		ADVANCE_STREAM64(O_CKEY_SD, skip_count);
 	else
-*/
 		ADVANCE_STREAM(O_CKEY_SD, skip_count);
 	ADVANCE_STREAM(O_CMNT_SD, skip_count * 2);
 	ADVANCE_STREAM(O_SUPP_SD, skip_count);

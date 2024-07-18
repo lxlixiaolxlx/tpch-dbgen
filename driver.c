@@ -107,6 +107,8 @@
 * Function prototypes
 */
 void	usage (void);
+int		prep_direct (char *);
+int		close_direct (void);
 void	kill_load (void);
 int		pload (int tbl);
 void	gen_tbl (int tnum, DSS_HUGE start, DSS_HUGE count, long upd_num);
@@ -118,7 +120,7 @@ int		partial (int, int);
 extern int optind, opterr;
 extern char *optarg;
 DSS_HUGE rowcnt = 0, minrow = 0;
-long upd_num = 0;
+long upd_num;
 double flt_scale;
 #if (defined(WIN32)&&!defined(_POSIX_))
 char *spawn_args[25];
@@ -126,8 +128,11 @@ char *spawn_args[25];
 #ifdef RNG_TEST
 extern seed_t Seed[];
 #endif
-static int bTableSet = 0;
 
+/*
+ *  Extensions to dbgen for generation of skewed data.
+ */
+extern double skew;
 
 /*
 * general table descriptions. See dss.h for details on structure
@@ -142,8 +147,10 @@ static int bTableSet = 0;
 *                               flat file output in <name>.tbl
 * long      base;            -- base scale rowcount of table; 
 *                               0 if derived
-* int       (*loader) ();    -- function to present output
+* int       (*header) ();    -- function to prep output
+* int       (*loader[2]) (); -- functions to present output
 * long      (*gen_seed) ();  -- functions to seed the RNG
+* int       (*verify) ();    -- function to verfiy the data set without building it
 * int       child;           -- non-zero if there is an associated detail table
 * unsigned long vtotal;      -- "checksum" total 
 * }         tdef;
@@ -165,6 +172,20 @@ int pr_nation (code_t * c, int mode);
 int pr_region (code_t * c, int mode);
 
 /*
+* inline load functions; used with -D(irect) option
+*/
+int ld_cust (customer_t * c, int mode);
+int ld_line (order_t * o, int mode);
+int ld_order (order_t * o, int mode);
+int ld_part (part_t * p, int mode);
+int ld_psupp (part_t * p, int mode);
+int ld_supp (supplier_t * s, int mode);
+int ld_order_line (order_t * o, int mode);
+int ld_part_psupp (part_t * p, int mode);
+int ld_nation (code_t * c, int mode);
+int ld_region (code_t * c, int mode);
+
+/*
 * seed generation functions; used with '-O s' option
 */
 long sd_cust (int child, DSS_HUGE skip_count);
@@ -176,29 +197,84 @@ long sd_supp (int child, DSS_HUGE skip_count);
 long sd_order_line (int child, DSS_HUGE skip_count);
 long sd_part_psupp (int child, DSS_HUGE skip_count);
 
+/*
+* header output functions); used with -h(eader) option
+*/
+int hd_cust (FILE * f);
+int hd_line (FILE * f);
+int hd_order (FILE * f);
+int hd_part (FILE * f);
+int hd_psupp (FILE * f);
+int hd_supp (FILE * f);
+int hd_order_line (FILE * f);
+int hd_part_psupp (FILE * f);
+int hd_nation (FILE * f);
+int hd_region (FILE * f);
+
+/*
+* data verfication functions; used with -O v option
+*/
+int vrf_cust (customer_t * c, int mode);
+int vrf_line (order_t * o, int mode);
+int vrf_order (order_t * o, int mode);
+int vrf_part (part_t * p, int mode);
+int vrf_psupp (part_t * p, int mode);
+int vrf_supp (supplier_t * s, int mode);
+int vrf_order_line (order_t * o, int mode);
+int vrf_part_psupp (part_t * p, int mode);
+int vrf_nation (code_t * c, int mode);
+int vrf_region (code_t * c, int mode);
+
+
 tdef tdefs[] =
 {
-	{"part.tbl", "part table", 200000,
-		pr_part, sd_part, PSUPP, 0},
-	{"partsupp.tbl", "partsupplier table", 200000,
-		pr_psupp, sd_psupp, NONE, 0},
-	{"supplier.tbl", "suppliers table", 10000,
-		pr_supp, sd_supp, NONE, 0},
-	{"customer.tbl", "customers table", 150000,
-		pr_cust, sd_cust, NONE, 0},
-	{"orders.tbl", "order table", 150000,
-		pr_order, sd_order, LINE, 0},
-	{"lineitem.tbl", "lineitem table", 150000,
-		pr_line, sd_line, NONE, 0},
-	{"orders.tbl", "orders/lineitem tables", 150000,
-		pr_order_line, sd_order, LINE, 0},
-	{"part.tbl", "part/partsupplier tables", 200000,
-		pr_part_psupp, sd_part, PSUPP, 0},
-	{"nation.tbl", "nation table", NATIONS_MAX,
-		pr_nation, NO_LFUNC, NONE, 0},
-	{"region.tbl", "region table", NATIONS_MAX,
-		pr_region, NO_LFUNC, NONE, 0},
+	{"part.tbl", "part table", 200000, hd_part,
+		{pr_part, ld_part}, sd_part, vrf_part, PSUPP, 0},
+	{"partsupp.tbl", "partsupplier table", 200000, hd_psupp,
+		{pr_psupp, ld_psupp}, sd_psupp, vrf_psupp, NONE, 0},
+	{"supplier.tbl", "suppliers table", 10000, hd_supp,
+		{pr_supp, ld_supp}, sd_supp, vrf_supp, NONE, 0},
+	{"customer.tbl", "customers table", 150000, hd_cust,
+		{pr_cust, ld_cust}, sd_cust, vrf_cust, NONE, 0},
+	{"orders.tbl", "order table", 150000, hd_order,
+		{pr_order, ld_order}, sd_order, vrf_order, LINE, 0},
+	{"lineitem.tbl", "lineitem table", 150000, hd_line,
+		{pr_line, ld_line}, sd_line, vrf_line, NONE, 0},
+	{"orders.tbl", "orders/lineitem tables", 150000, hd_order_line,
+		{pr_order_line, ld_order_line}, sd_order, vrf_order_line, LINE, 0},
+	{"part.tbl", "part/partsupplier tables", 200000, hd_part_psupp,
+		{pr_part_psupp, ld_part_psupp}, sd_part, vrf_part_psupp, PSUPP, 0},
+	{"nation.tbl", "nation table", NATIONS_MAX, hd_nation,
+		{pr_nation, ld_nation}, NO_LFUNC, vrf_nation, NONE, 0},
+	{"region.tbl", "region table", NATIONS_MAX, hd_region,
+		{pr_region, ld_region}, NO_LFUNC, vrf_region, NONE, 0},
 };
+
+int *pids;
+
+
+/*
+* routines to handle the graceful cleanup of multi-process loads
+*/
+
+void
+stop_proc (int signum)
+{
+	exit (0);
+}
+
+void
+kill_load (void)
+{
+	int i;
+	
+#if !defined(U2200) && !defined(DOS)
+	for (i = 0; i < children; i++)
+		if (pids[i])
+			KILL (pids[i]);
+#endif /* !U2200 && !DOS */
+		return;
+}
 
 /*
 * re-set default output file names 
@@ -221,10 +297,10 @@ child_table:
 				return (-1);;
 			if ((new_name = strchr (line, '\n')) != NULL)
 				*new_name = '\0';
-			if ((int)strlen (line) == 0)
+			if (strlen (line) == 0)
 				return (0);
 		}
-		new_name = (char *) malloc ((int)strlen (line) + 1);
+		new_name = (char *) malloc (strlen (line) + 1);
 		MALLOC_CHECK (new_name);
 		strcpy (new_name, line);
 		tdefs[i].name = new_name;
@@ -332,34 +408,52 @@ gen_tbl (int tnum, DSS_HUGE start, DSS_HUGE count, long upd_num)
 				}
 
 			if (set_seeds == 0)
-				tdefs[tnum].loader(&o, upd_num);
+				if (validate)
+					tdefs[tnum].verify(&o, 0);
+				else
+					tdefs[tnum].loader[direct] (&o, upd_num);
 			break;
 		case SUPP:
 			mk_supp (i, &supp);
 			if (set_seeds == 0)
-				tdefs[tnum].loader(&supp, upd_num);
+				if (validate)
+					tdefs[tnum].verify(&supp, 0);
+				else
+					tdefs[tnum].loader[direct] (&supp, upd_num);
 			break;
 		case CUST:
 			mk_cust (i, &cust);
 			if (set_seeds == 0)
-				tdefs[tnum].loader(&cust, upd_num);
+				if (validate)
+					tdefs[tnum].verify(&cust, 0);
+				else
+					tdefs[tnum].loader[direct] (&cust, upd_num);
 			break;
 		case PSUPP:
 		case PART:
   		case PART_PSUPP: 
 			mk_part (i, &part);
 			if (set_seeds == 0)
-				tdefs[tnum].loader(&part, upd_num);
+				if (validate)
+					tdefs[tnum].verify(&part, 0);
+				else
+					tdefs[tnum].loader[direct] (&part, upd_num);
 			break;
 		case NATION:
 			mk_nation (i, &code);
 			if (set_seeds == 0)
-				tdefs[tnum].loader(&code, 0);
+				if (validate)
+					tdefs[tnum].verify(&code, 0);
+				else
+					tdefs[tnum].loader[direct] (&code, 0);
 			break;
 		case REGION:
 			mk_region (i, &code);
 			if (set_seeds == 0)
-				tdefs[tnum].loader(&code, 0);
+				if (validate)
+					tdefs[tnum].verify(&code, 0);
+				else
+					tdefs[tnum].loader[direct] (&code, 0);
 			break;
 		}
 		row_stop(tnum);
@@ -379,23 +473,31 @@ usage (void)
 {
 	fprintf (stderr, "%s\n%s\n\t%s\n%s %s\n\n",
 		"USAGE:",
-		"dbgen [-{vf}][-T {pcsoPSOL}]",
+		"dbgen [-{vfFD}] [-O {fhmsv}][-T {pcsoPSOL}]",
 		"[-s <scale>][-C <procs>][-S <step>]",
-		"dbgen [-v] [-O m] [-s <scale>]",
-		"[-U <updates>]");
-	fprintf (stderr, "Basic Options\n===========================\n");
-	fprintf (stderr, "-C <n> -- separate data set into <n> chunks (requires -S, default: 1)\n");
+		"dbgen [-v] [-O {dfhmr}] [-s <scale>]",
+		"[-U <updates>] [-r <percent>]");
+	fprintf (stderr, "-b <s> -- load distributions for <s>\n");
+	fprintf (stderr, "-C <n> -- use <n> processes to generate data\n");
+	fprintf (stderr, "          [Under DOS, must be used with -S]\n");
+	fprintf (stderr, "-D     -- do database load in line\n");
+    fprintf (stderr, "-d <n> -- split deletes between <n> files\n");
 	fprintf (stderr, "-f     -- force. Overwrite existing files\n");
+	fprintf (stderr, "-F     -- generate flat files output\n");
 	fprintf (stderr, "-h     -- display this message\n");
+    fprintf (stderr, "-i <n> -- split inserts between <n> files\n");
+	fprintf (stderr, "-n <s> -- inline load into database <s>\n");
+	fprintf (stderr, "-O d   -- generate SQL syntax for deletes\n");
+	fprintf (stderr, "-O f   -- over-ride default output file names\n");
+	fprintf (stderr, "-O h   -- output files with headers\n");
+	fprintf (stderr, "-O m   -- produce columnar output\n");
+	fprintf (stderr, "-O r   -- generate key ranges for deletes.\n");
+	fprintf (stderr, "-O v   -- Verify data set without generating it.\n");
 	fprintf (stderr, "-q     -- enable QUIET mode\n");
-	fprintf (stderr, "-s <n> -- set Scale Factor (SF) to  <n> (default: 1) \n");
-	fprintf (stderr, "-S <n> -- build the <n>th step of the data/update set (used with -C or -U)\n");
-	fprintf (stderr, "-U <n> -- generate <n> update sets\n");
-	fprintf (stderr, "-v     -- enable VERBOSE mode\n");
-	fprintf (stderr, "\nAdvanced Options\n===========================\n");
-	fprintf (stderr, "-b <s> -- load distributions for <s> (default: dists.dss)\n");
-    fprintf (stderr, "-d <n> -- split deletes between <n> files (requires -U)\n");
-    fprintf (stderr, "-i <n> -- split inserts between <n> files (requires -U)\n");
+	fprintf (stderr, "-r <n> -- updates refresh (n/100)%% of the\n");
+	fprintf (stderr, "          data set\n");
+	fprintf (stderr, "-s <n> -- set Scale Factor (SF) to  <n> \n");
+	fprintf (stderr, "-S <n> -- build the <n>th step of the data/update set\n");
 	fprintf (stderr, "-T c   -- generate cutomers ONLY\n");
 	fprintf (stderr, "-T l   -- generate nation/region ONLY\n");
 	fprintf (stderr, "-T L   -- generate lineitem ONLY\n");
@@ -407,13 +509,20 @@ usage (void)
 	fprintf (stderr, "-T r   -- generate region ONLY\n");
 	fprintf (stderr, "-T s   -- generate suppliers ONLY\n");
 	fprintf (stderr, "-T S   -- generate partsupp ONLY\n");
+	fprintf (stderr, "-U <s> -- generate <s> update sets\n");
+	fprintf (stderr, "-v     -- enable VERBOSE mode\n");
+	fprintf (stderr, "-z     -- generate skewed data distributions\n");
 	fprintf (stderr,
 		"\nTo generate the SF=1 (1GB), validation database population, use:\n");
-	fprintf (stderr, "\tdbgen -vf -s 1\n");
+	fprintf (stderr, "\tdbgen -vfF -s 1\n");
 	fprintf (stderr, "\nTo generate updates for a SF=1 (1GB), use:\n");
 	fprintf (stderr, "\tdbgen -v -U 1 -s 1\n");
 }
 
+/*
+* pload() -- handle the parallel loading of tables
+*/
+#ifndef DOS
 /*
 * int partial(int tbl, int s) -- generate the s-th part of the named tables data
 */
@@ -425,11 +534,12 @@ partial (int tbl, int s)
 	
 	if (verbose > 0)
 	{
-		fprintf (stderr, "\tStarting to load stage %d of %ld for %s...",
+		fprintf (stderr, "\tStarting to load stage %d of %d for %s...",
 			s, children, tdefs[tbl].comment);
 	}
 	
-	set_files (tbl, s);
+	if (direct == 0)
+		set_files (tbl, s);
 	
 	rowcnt = set_state(tbl, scale, children, s, &extra);
 
@@ -444,213 +554,265 @@ partial (int tbl, int s)
 	return (0);
 }
 
+
+int
+pload (int tbl)
+{
+	int c = 0, i, status;
+	
+	if (verbose > 0)
+	{
+		fprintf (stderr, "Starting %d children to load %s",
+			children, tdefs[tbl].comment);
+	}
+	for (c = 0; c < children; c++)
+	{
+		pids[c] = SPAWN ();
+		if (pids[c] == -1)
+		{
+			perror ("Child loader not created");
+			kill_load ();
+			exit (-1);
+		}
+		else if (pids[c] == 0)	/* CHILD */
+		{
+			SET_HANDLER (stop_proc);
+			verbose = 0;
+			partial (tbl, c+1);
+			exit (0);
+		}
+		else if (verbose > 0)			/* PARENT */
+			fprintf (stderr, ".");
+	}
+	
+	if (verbose > 0)
+		fprintf (stderr, "waiting...");
+
+	c = children;
+	while (c)
+	{
+		i = WAIT (&status, pids[c - 1]);
+		if (i == -1 && children)
+		{
+			if (errno == ECHILD)
+				fprintf (stderr, "\nCould not wait on pid %d\n", pids[c - 1]);
+			else if (errno == EINTR)
+				fprintf (stderr, "\nProcess %d stopped abnormally\n", pids[c - 1]);
+			else if (errno == EINVAL)
+				fprintf (stderr, "\nProgram bug\n");
+		}
+		if (! WIFEXITED(status)) {
+			(void) fprintf(stderr, "\nProcess %d: ", i);
+			if (WIFSIGNALED(status)) {
+				(void) fprintf(stderr, "rcvd signal %d\n",
+					WTERMSIG(status));
+				} else if (WIFSTOPPED(status)) {
+				(void) fprintf(stderr, "stopped, signal %d\n",
+					WSTOPSIG(status));
+					}
+				
+			}
+		c--;
+	}
+
+	if (verbose > 0)
+		fprintf (stderr, "done\n");
+	return (0);
+}
+#endif /* !DOS */
+
 void
 process_options (int count, char **vector)
 {
 	int option;
-	FILE *pF;
 	
 	while ((option = getopt (count, vector,
-		"b:C:d:fi:hO:P:qs:S:T:U:v")) != -1)
+		"b:C:Dd:Ffi:hn:z:O:P:qr:s:S:T:U:v")) != -1)
 	switch (option)
-	{
+		{
 		case 'b':				/* load distributions from named file */
-			d_path = (char *)malloc((int)strlen(optarg) + 1);
+			d_path = (char *)malloc(strlen(optarg) + 1);
 			MALLOC_CHECK(d_path);
 			strcpy(d_path, optarg);
-			if ((pF = fopen(d_path, "r")) == NULL)
-			{
-				fprintf(stderr, "ERROR: Invalid argument to -b");
-				exit(-1);
-			}
-			else
-				fclose(pF);
-
-			break;
-		case 'C':
-			children = atoi (optarg);
-			break;
-		case 'd':
-			delete_segments = atoi (optarg);
-			break;
-		case 'f':				/* blind overwrites; Force */
-			force = 1;
-			break;
-		case 'i':
-			insert_segments = atoi (optarg);
 			break;
 		case 'q':				/* all prompts disabled */
 			verbose = -1;
 			break;
-		case 's':				/* scale by Percentage of base rowcount */
-		case 'P':				/* for backward compatibility */
-			flt_scale = atof (optarg);
-			if (flt_scale < MIN_SCALE)
-			{
-				int i;
-				int int_scale;
+		case 'i':
+			insert_segments = atoi (optarg);
+			break;
+		case 'd':
+			delete_segments = atoi (optarg);
+			break;
+	  case 'S':				/* generate a particular STEP */
+		  step = atoi (optarg);
+		  break;
+	  case 'v':				/* life noises enabled */
+		  verbose = 1;
+		  break;
+	  case 'z':				/* for all columns use specified skew parameter */
+	  	skew = atof(optarg);
+		if(skew==-1.0)
+			skew = 5;
+		break;
+	  case 'f':				/* blind overwrites; Force */
+		  force = 1;
+		  break;
+	  case 'T':				/* generate a specifc table */
+		  switch (*optarg)
+		  {
+		  case 'c':			/* generate customer ONLY */
+			  table = 1 << CUST;
+			  break;
+		  case 'L':			/* generate lineitems ONLY */
+			  table = 1 << LINE;
+			  break;
+		  case 'l':			/* generate code table ONLY */
+			  table = 1 << NATION;
+			  table |= 1 << REGION;
+			  break;
+		  case 'n':			/* generate nation table ONLY */
+			  table = 1 << NATION;
+			  break;
+		  case 'O':			/* generate orders ONLY */
+			  table = 1 << ORDER;
+			  break;
+		  case 'o':			/* generate orders/lineitems ONLY */
+			  table = 1 << ORDER_LINE;
+			  break;
+		  case 'P':			/* generate part ONLY */
+			  table = 1 << PART;
+			  break;
+		  case 'p':			/* generate part/partsupp ONLY */
+			  table = 1 << PART_PSUPP;
+			  break;
+		  case 'r':			/* generate region table ONLY */
+			  table = 1 << REGION;
+			  break;
+		  case 'S':			/* generate partsupp ONLY */
+			  table = 1 << PSUPP;
+			  break;
+		  case 's':			/* generate suppliers ONLY */
+			  table = 1 << SUPP;
+			  break;
+		  default:
+			  fprintf (stderr, "Unknown table name %s\n",
+				  optarg);
+			  usage ();
+			  exit (1);
+		  }
+		  break;
+		  case 's':				/* scale by Percentage of base rowcount */
+		  case 'P':				/* for backward compatibility */
+			  flt_scale = atof (optarg);
+			  if (flt_scale < MIN_SCALE)
+			  {
+				  int i;
+				  int int_scale;
+				  
+				  scale = 1;
+				  int_scale = (int)(1000 * flt_scale);
+				  for (i = PART; i < REGION; i++)
+				  {
+					  tdefs[i].base = (DSS_HUGE)(int_scale * tdefs[i].base)/1000;
+					  if (tdefs[i].base < 1)
+						  tdefs[i].base = 1;
+				  }
+			  }
+			  else
+				  scale = (long) flt_scale;
+			  if (scale > MAX_SCALE)
+			  {
+				  fprintf (stderr, "%s %5.0f %s\n\t%s\n\n",
+					  "NOTE: Data generation for scale factors >",
+					  MAX_SCALE,
+					  "GB is still in development,",
+					  "and is not yet supported.\n");
+				  fprintf (stderr,
+					  "Your resulting data set MAY NOT BE COMPLIANT!\n");
+			  }
+			  break;
+		  case 'O':				/* optional actions */
+			  switch (tolower (*optarg))
+			  {
+			  case 'd':			/* generate SQL for deletes */
+				  gen_sql = 1;
+				  break;
+			  case 'f':			/* over-ride default file names */
+				  fnames = 1;
+				  break;
+			  case 'h':			/* generate headers */
+				  header = 1;
+				  break;
+			  case 'm':			/* generate columnar output */
+				  columnar = 1;
+				  break;
+			  case 'r':			/* generate key ranges for delete */
+				  gen_rng = 1;
+				  break;
+			  case 's':			/* calibrate the RNG usage */
+				  set_seeds = 1;
+				  break;
+			  case 'v':			/* validate the data set */
+				  validate = 1;
+				  break;
+			  default:
+				  fprintf (stderr, "Unknown option name %s\n",
+					  optarg);
+				  usage ();
+				  exit (1);
+			  }
+			  break;
+			  case 'D':				/* direct load of generated data */
+				  direct = 1;
+				  break;
+			  case 'F':				/* generate flat files for later loading */
+				  direct = 0;
+				  break;
+			  case 'U':				/* generate flat files for update stream */
+				  updates = atoi (optarg);
+				  break;
+			  case 'r':				/* set the refresh (update) percentage */
+				  refresh = atoi (optarg);
+				  break;
+#ifndef DOS
+			  case 'C':
+				  children = atoi (optarg);
+				  break;
+#endif /* !DOS */
+			  case 'n':				/* set name of database for direct load */
+				  db_name = (char *) malloc (strlen (optarg) + 1);
+				  MALLOC_CHECK (db_name);
+				  strcpy (db_name, optarg);
+				  break;
+			  default:
+				  printf ("ERROR: option '%c' unknown.\n",
+					  *(vector[optind] + 1));
+			  case 'h':				/* something unexpected */
+				  fprintf (stderr,
+					  "%s Population Generator (Version %d.%d.%d build %d)\n",
+					  NAME, VERSION, RELEASE, PATCH);
+				  fprintf (stderr, "Copyright %s %s\n", TPC, C_DATES);
+				  usage ();
+				  exit (1);
+	  }
 
-				scale = 1;
-				int_scale = (int)(1000 * flt_scale);
-				for (i = PART; i < REGION; i++)
-				{
-					tdefs[i].base = (DSS_HUGE)(int_scale * tdefs[i].base)/1000;
-					if (tdefs[i].base < 1)
-						tdefs[i].base = 1;
-				}
-			}
-			else
-				scale = (long) flt_scale;
-			if (scale > MAX_SCALE)
-			{
-				fprintf (stderr, "%s %5.0f %s\n\t%s\n\n",
-					"NOTE: Data generation for scale factors >",
-					MAX_SCALE,
-					"GB is still in development,",
-					"and is not yet supported.\n");
-				fprintf (stderr,
-					"Your resulting data set MAY NOT BE COMPLIANT!\n");
-			}
-			break;
-		case 'S':				/* generate a particular STEP */
-			step = atoi (optarg);
-			break;
-		case 'U':				/* generate flat files for update stream */
-			updates = atoi (optarg);
-			break;
-		case 'v':				/* life noises enabled */
-			verbose = 1;
-			break;
-		case 'T':				/* generate a specifc table */
-			switch (*optarg)
-			{
-			case 'c':			/* generate customer ONLY */
-				table = 1 << CUST;
-				bTableSet = 1;
-				break;
-			case 'L':			/* generate lineitems ONLY */
-				table = 1 << LINE;
-				bTableSet = 1;
-				break;
-			case 'l':			/* generate code table ONLY */
-				table = 1 << NATION;
-				table |= 1 << REGION;
-				bTableSet = 1;
-				break;
-			case 'n':			/* generate nation table ONLY */
-				table = 1 << NATION;
-				bTableSet = 1;
-				break;
-			case 'O':			/* generate orders ONLY */
-				table = 1 << ORDER;
-				bTableSet = 1;
-				break;
-			case 'o':			/* generate orders/lineitems ONLY */
-				table = 1 << ORDER_LINE;
-				bTableSet = 1;
-				break;
-			case 'P':			/* generate part ONLY */
-				table = 1 << PART;
-				bTableSet = 1;
-				break;
-			case 'p':			/* generate part/partsupp ONLY */
-				table = 1 << PART_PSUPP;
-				bTableSet = 1;
-				break;
-			case 'r':			/* generate region table ONLY */
-				table = 1 << REGION;
-				bTableSet = 1;
-				break;
-			case 'S':			/* generate partsupp ONLY */
-				table = 1 << PSUPP;
-				bTableSet = 1;
-				break;
-			case 's':			/* generate suppliers ONLY */
-				table = 1 << SUPP;
-				bTableSet = 1;
-				break;
-			default:
-				fprintf (stderr, "Unknown table name %s\n",
-					optarg);
-				usage ();
-				exit (1);
-			}
-			break;
-		case 'O':				/* optional actions */
-			switch (tolower (*optarg))
-			{
-			case 's':			/* calibrate the RNG usage */
-				set_seeds = 1;
-				break;
-			default:
-				fprintf (stderr, "Unknown option name %s\n",
-					optarg);
-				usage ();
-				exit (1);
-			}
-			break;
-		default:
-			printf ("ERROR: option '%c' unknown.\n",
-				*(vector[optind] + 1));
-		case 'h':				/* something unexpected */
-			fprintf (stderr,
-				"%s Population Generator (Version %d.%d.%d build %d)\n",
-				NAME, VERSION, RELEASE, PATCH, BUILD);
-			fprintf (stderr, "Copyright %s %s\n", TPC, C_DATES);
-			usage ();
-			exit (1);
-	}
+#ifndef DOS
+	if (children != 1 && step == -1)
+		{
+		pids = malloc(children * sizeof(pid_t));
+		MALLOC_CHECK(pids)
+		}
+#else
+	if (children != 1 && step < 0)
+		{
+		fprintf(stderr, "ERROR: -C must be accompanied by -S on this platform\n");
+		exit(1);
+		}
+#endif /* DOS */
 
 	return;
 }
-
-void validate_options(void)
-{
-	// DBGenOptions, 3.1
-	if (children != 1)
-	{
-		if (updates != 0)
-		{
-			fprintf(stderr, "ERROR: -C is not valid when generating updates\n");
-			exit(-1);
-		}
-		if (step == -1)
-		{
-			fprintf(stderr, "ERROR: -S must be specified when generating data in multiple chunks\n");
-			exit(-1);
-		}
-	}
-
-	// DBGenOptions, 3.3
-	if (updates == 0)
-	{
-		if ((insert_segments != 0) || (delete_segments != 0))
-		{
-			fprintf(stderr, "ERROR: -d/-i are only valid when generating updates\n");
-			exit(-1);
-		}
-	}
-
-	// DBGenOptions, 3.9
-	if (step != -1)
-	{
-		if ((children == 1) && (updates == 0))
-		{
-			fprintf(stderr, "ERROR: -S is only valid when generating data in multiple chunks or generating updates\n");
-			exit(-1);
-		}
-	}
-
-	// DBGenOptions, 3.10
-	if (bTableSet && (updates != 0))
-	{
-		fprintf(stderr, "ERROR: -T not valid when generating updates\n");
-		exit(-1);
-	}
-
-	return;
-}
-
 
 /*
 * MAIN
@@ -676,10 +838,14 @@ main (int ac, char **av)
     insert_lineitem_segment=0;
     delete_segment=0;
 	verbose = 0;
+	columnar = 0;
 	set_seeds = 0;
+	header = 0;
+	direct = 0;
 	scale = 1;
 	flt_scale = 1.0;
 	updates = 0;
+	refresh = UPD_PCT;
 	step = -1;
 	tdefs[ORDER].base *=
 		ORDERS_PER_CUST;			/* have to do this after init */
@@ -687,6 +853,10 @@ main (int ac, char **av)
 		ORDERS_PER_CUST;			/* have to do this after init */
 	tdefs[ORDER_LINE].base *=
 		ORDERS_PER_CUST;			/* have to do this after init */
+	fnames = 0;
+	db_name = NULL;
+	gen_sql = 0;
+	gen_rng = 0;
 	children = 1;
 	d_path = NULL;
 	
@@ -694,11 +864,10 @@ main (int ac, char **av)
 	signal (SIGINT, exit);
 #endif /* NO_SUPPORT */
 	process_options (ac, av);
-	validate_options();
 #if (defined(WIN32)&&!defined(_POSIX_))
 	for (i = 0; i < ac; i++)
 	{
-		spawn_args[i] = malloc (((int)strlen (av[i]) + 1) * sizeof (char));
+		spawn_args[i] = malloc ((strlen (av[i]) + 1) * sizeof (char));
 		MALLOC_CHECK (spawn_args[i]);
 		strcpy (spawn_args[i], av[i]);
 	}
@@ -706,12 +875,24 @@ main (int ac, char **av)
 #endif
 	
 	if (verbose >= 0)
-		{
+	{
 		fprintf (stderr,
 			"%s Population Generator (Version %d.%d.%d)\n",
 			NAME, VERSION, RELEASE, PATCH);
 		fprintf (stderr, "Copyright %s %s\n", TPC, C_DATES);
+		if( skew == 5 )
+		{
+			fprintf (stderr, "Generating skew data with a random zipf value for each column\n");
 		}
+		else if( skew > 0 && skew <= 4 )
+		{
+			fprintf (stderr, "Generating skew data with zipf value = %.2f\n", skew);
+		}
+		else
+		{
+			fprintf (stderr, "Generating uniform data\n");
+		}
+	}
 	
 	load_dists ();
 #ifdef RNG_TEST
@@ -730,8 +911,8 @@ main (int ac, char **av)
 		/* 
 		 * set RNG to start generating rows beyond SF=scale
 		 */
-		set_state (ORDER, scale, 100, 101, &i); 
-		rowcnt = (int)(tdefs[ORDER_LINE].base / 10000 * scale * UPD_PCT);
+		set_state (ORDER, scale, children, children + 1, &i); 
+		rowcnt = (int)(tdefs[ORDER_LINE].base / 10000 * scale * refresh);
 		if (step > 0)
 			{
 			/* 
@@ -751,8 +932,8 @@ main (int ac, char **av)
 			{
 			if (verbose > 0)
 				fprintf (stderr,
-				"Generating update pair #%ld for %s",
-				upd_num + 1, tdefs[ORDER_LINE].comment);
+				"Generating update pair #%d for %s [pid: %d]",
+				upd_num + 1, tdefs[ORDER_LINE].comment, DSS_PROC);
 			insert_orders_segment=0;
 			insert_lineitem_segment=0;
 			delete_segment=0;
@@ -770,31 +951,77 @@ main (int ac, char **av)
 	/**
 	** actual data generation section starts here
 	**/
-
-	/*
-	* traverse the tables, invoking the appropriate data generation routine for any to be built
-	*/
+/*
+ * open database connection or set all the file names, as appropriate
+ */
+	if (direct)
+		prep_direct ((db_name) ? db_name : DBNAME);
+	else if (fnames)
+		for (i = PART; i <= REGION; i++)
+		{
+			if (table & (1 << i))
+				if (set_files ((int)i, -1))
+				{
+					fprintf (stderr, "Load aborted!\n");
+					exit (1);
+				}
+		}
+		
+/*
+ * traverse the tables, invoking the appropriate data generation routine for any to be built
+ */
 	for (i = PART; i <= REGION; i++)
 		if (table & (1 << i))
 		{
 			if (children > 1 && i < NATION)
-			{
-				partial ((int)i, step);
-			}
-			else
-			{
-				minrow = 1;
-				if (i < NATION)
-					rowcnt = tdefs[i].base * scale;
+				if (step >= 0)
+				{
+					if (validate)
+					{
+						INTERNAL_ERROR("Cannot validate parallel data generation");
+					}
+					else
+						partial ((int)i, step);
+				}
+#ifdef DOS
 				else
-					rowcnt = tdefs[i].base;
-				if (verbose > 0)
-					fprintf (stderr, "Generating data for %s", tdefs[i].comment);
-				gen_tbl ((int)i, minrow, rowcnt, upd_num);
-				if (verbose > 0)
-					fprintf (stderr, "done.\n");
-			}
+				{
+					fprintf (stderr,
+						"Parallel load is not supported on your platform.\n");
+					exit (1);
+				}
+#else
+				else
+				{
+					if (validate)
+					{
+						INTERNAL_ERROR("Cannot validate parallel data generation");
+					}
+					else
+						pload ((int)i);
+				}
+#endif /* DOS */
+				else
+				{
+					minrow = 1;
+					if (i < NATION)
+						rowcnt = tdefs[i].base * scale;
+					else
+						rowcnt = tdefs[i].base;
+					if (verbose > 0)
+						fprintf (stderr, "%s data for %s [pid: %ld]",
+						(validate)?"Validating":"Generating", tdefs[i].comment, DSS_PROC);
+					gen_tbl ((int)i, minrow, rowcnt, upd_num);
+					if (verbose > 0)
+						fprintf (stderr, "done.\n");
+				}
+				if (validate)
+					printf("Validation checksum for %s at %d GB: %0x\n", 
+						 tdefs[i].name, scale, tdefs[i].vtotal);
 		}
+			
+		if (direct)
+			close_direct ();
 			
 		return (0);
 }

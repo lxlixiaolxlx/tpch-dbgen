@@ -76,7 +76,7 @@
 #error Benchmark version must be defined in config.h
 #endif
 #define TPC             "Transaction Processing Performance Council"
-#define C_DATES         "1994 - 2010"
+#define C_DATES         "1994 - 2008"
 
 #include "config.h"
 #include "shared.h"
@@ -147,8 +147,9 @@ static char lnoise[4] = {'|', '/', '-', '\\' };
 #define  MK_SPARSE(key, seq) \
          (((((key>>3)<<2)|(seq & 0x0003))<<3)|(key & 0x0007))
 
-#define RANDOM(tgt, lower, upper, stream)	dss_random(&tgt, lower, upper, stream)
-#define RANDOM64(tgt, lower, upper, stream)	dss_random64(&tgt, lower, upper, stream)
+
+#define RANDOM(tgt, lower, upper, stream, skew, n)	dss_random(&tgt, lower, upper, stream, skew, n)
+#define RANDOM64(tgt, lower, upper, stream, skew, n)	dss_random64(&tgt, lower, upper, stream, skew, n)
 	
      
 
@@ -170,15 +171,16 @@ typedef struct
  */
 #define DIST_SIZE(d)		d->count
 #define DIST_MEMBER(d, i)	((set_member *)((d)->list + i))->text
-#define DIST_PERMUTE(d, i)	(d->permute[i])
 
 typedef struct
 {
    char     *name;
    char     *comment;
    DSS_HUGE      base;
-   int       (*loader) ();
+   int       (*header) ();
+   int       (*loader[2]) ();
    long      (*gen_seed)();
+   int       (*verify) ();
    int       child;
    DSS_HUGE vtotal;
 }         tdef;
@@ -222,7 +224,7 @@ DSS_HUGE	set_state PROTO((int t, long scale, long procs, long step, DSS_HUGE *e)
 /* rnd.c */
 DSS_HUGE	NextRand PROTO((DSS_HUGE nSeed));
 DSS_HUGE	UnifInt PROTO((DSS_HUGE nLow, DSS_HUGE nHigh, long nStream));
-void	dss_random(DSS_HUGE *tgt, DSS_HUGE min, DSS_HUGE max, long seed);
+void	dss_random(DSS_HUGE *tgt, DSS_HUGE min, DSS_HUGE max, long seed, double skew, long n);
 void	row_start(int t);
 void	row_stop(int t);
 void	dump_seeds(int t);
@@ -273,11 +275,19 @@ EXTERN int refresh;
 EXTERN int resume;
 EXTERN long verbose;
 EXTERN long force;
+EXTERN long header;
+EXTERN long columnar;
+EXTERN long direct;
 EXTERN long updates;
 EXTERN long table;
 EXTERN long children;
+EXTERN long fnames;
+EXTERN int  gen_sql;
+EXTERN int  gen_rng;
+EXTERN char *db_name;
 EXTERN int  step;
 EXTERN int	set_seeds;
+EXTERN int  validate;
 EXTERN char *d_path;
 
 /* added for segmented updates */
@@ -374,6 +384,7 @@ extern tdef tdefs[];
 #define  O_CLRK_SCL      1000
 #define  O_LCNT_MIN      1
 #define  O_LCNT_MAX      7
+#define  O_OKEY_MAX	(long)(tdefs[ORDER].base * scale)
 
 /*
  * defines which control the lineitem table
@@ -393,6 +404,9 @@ extern tdef tdefs[];
 #define  L_CDTE_MAX   90
 #define  L_RDTE_MIN   1
 #define  L_RDTE_MAX   30
+#define	 L_LCNT_MAX   (tdefs[LINE].base * scale)
+#define  L_LINE_SIZE  (4 * L_LCNT_MAX)
+
 /*
  * defines which control the time table
  */
@@ -423,9 +437,10 @@ extern tdef tdefs[];
 #define  Q11_FRACTION (double)0.0001
 /*
  * max and min SF in GB; Larger SF will require changes to the build routines
+ * ** Change to 30000 instead of 100000 to support skew data generation **
  */
 #define  MIN_SCALE      1.0
-#define  MAX_SCALE   100000.0
+#define  MAX_SCALE   30000.0
 /*
  * beyond this point we need to allow for BCD calculations
  */
@@ -484,7 +499,7 @@ int dbg_print(int dt, FILE *tgt, void *data, int len, int eol);
    sprintf(tgt, "%02d-%02d-19%02d", mn, dy, yr)
 #else
 #define  PR_DATE(tgt, yr, mn, dy)	\
-sprintf(tgt, "19%02ld-%02ld-%02ld", yr, mn, dy)
+sprintf(tgt, "19%02d-%02d-%02d", yr, mn, dy)
 #endif /* DATE_FORMAT */
 
 /*
@@ -545,4 +560,5 @@ sprintf(tgt, "19%02ld-%02ld-%02ld", yr, mn, dy)
 #define  BBB_TYPE_SD   45         
 #define  BBB_CMNT_SD   46         
 #define  BBB_OFFSET_SD 47         
+#define  L_OKEY_SD  48
 #endif            /* DSS_H */

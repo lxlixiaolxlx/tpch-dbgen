@@ -1,18 +1,9 @@
 #
-# $Id: makefile.suite,v 1.25 2009/10/22 19:10:21 jms Exp $
+# $Id: makefile.suite,v 1.22 2008/09/15 16:37:46 jms Exp $
 #
 # Revision History
 # ===================
 # $Log: makefile.suite,v $
-# Revision 1.25  2009/10/22 19:10:21  jms
-# update revision to 2.9.0, disable bug55 fix
-#
-# Revision 1.24  2009/10/22 19:06:10  jms
-# update revision to 2.9.0, disable bug55 fix
-#
-# Revision 1.23  2009/06/28 14:01:08  jms
-# bug fix for DOP
-#
 # Revision 1.22  2008/09/15 16:37:46  jms
 # release 2.8.0 makefile.suite
 #
@@ -102,15 +93,17 @@
 ################
 CC      = gcc
 # Current values for DATABASE are: INFORMIX, DB2, TDAT (Teradata)
-#                                  SQLSERVER, SYBASE, ORACLE
+#                                  SQLSERVER, SYBASE
 # Current values for MACHINE are:  ATT, DOS, HP, IBM, ICL, MVS, 
 #                                  SGI, SUN, U2200, VMS, LINUX, WIN32 
 # Current values for WORKLOAD are:  TPCH
-DATABASE= ORACLE
-MACHINE = MAC
+DATABASE= DB2
+MACHINE = LINUX
 WORKLOAD = TPCH
 #
-CFLAGS	= -g -DDBNAME=\"dss\" -D$(MACHINE) -D$(DATABASE) -D$(WORKLOAD) -DRNG_TEST -D_FILE_OFFSET_BITS=64 
+# add -EDTERABYTE if orderkey will execeed 32 bits (SF >= 300)
+# and make the appropriate change in gen_schema() of runit.sh
+CFLAGS	= -w -O -DDBNAME=\"dss\" -D$(MACHINE) -D$(DATABASE) -D$(WORKLOAD) -DEOL_HANDLING # -DRNG_TEST
 LDFLAGS = -O
 # The OBJ,EXE and LIB macros will need to be changed for compilation under
 #  Windows NT
@@ -121,7 +114,7 @@ LIBS    = -lm
 # NO CHANGES SHOULD BE NECESSARY BELOW THIS LINE
 ###############
 VERSION=2
-RELEASE=13
+RELEASE=8
 PATCH=0
 BUILD=`grep BUILD release.h | cut -f3 -d' '`
 NEW_BUILD=`expr ${BUILD} + 1`
@@ -148,10 +141,10 @@ OBJ2 = build$(OBJ) bm_utils$(OBJ) qgen$(OBJ) rnd$(OBJ) varsub$(OBJ) \
 OBJS = $(OBJ1) $(OBJ2)
 #
 SETS = dists.dss 
-DOC=README HISTORY PORTING.NOTES BUGS
+DOC=README HISTORY PORTING.NOTES BUGS README_SKEW
 DDL  = dss.ddl dss.ri
-WINDOWS_IDE = tpch.dsw dbgen.dsp tpch.sln tpch.vcproj qgen.vcproj
-OTHER=makefile.suite $(SETS) $(DDL) $(WINDOWS_IDE)
+WINDOWS_IDE = tpch.dsw dbgen.dsp tpch.sln
+OTHER=makefile.suite makefile $(SETS) $(DDL) $(WINDOWS_IDE)
 # case is *important* in TEST_RES
 TEST_RES = O.res L.res c.res s.res P.res S.res n.res r.res
 #
@@ -161,18 +154,17 @@ FQD=queries/1.sql queries/2.sql queries/3.sql queries/4.sql queries/5.sql querie
 	queries/14.sql queries/15.sql queries/16.sql queries/17.sql queries/18.sql queries/19.sql queries/20.sql \
 	queries/21.sql queries/22.sql
 VARIANTS= variants/8a.sql variants/12a.sql variants/13a.sql variants/14a.sql variants/15a.sql 
-ANS   = answers/q1.out answers/q2.out answers/q3.out answers/q4.out answers/q5.out answers/q6.out answers/q7.out answers/q8.out \
-	answers/q9.out answers/q10.out answers/q11.out answers/q12.out answers/q13.out answers/q14.out answers/q15.out \
-	answers/q16.out answers/q17.out answers/q18.out answers/q19.out answers/q20.out answers/q21.out answers/q22.out
+ANS   = answers/1.ans answers/2.ans answers/3.ans answers/4.ans answers/5.ans answers/6.ans answers/7.ans answers/8.ans \
+	answers/9.ans answers/10.ans answers/11.ans answers/12.ans answers/13.ans answers/14.ans answers/15.ans \
+	answers/16.ans answers/17.ans answers/18.ans answers/19.ans answers/20.ans answers/21.ans answers/22.ans
 QSRC  = $(FQD) $(VARIANTS) $(ANS)
 TREE_DOC=tree.readme tree.changes appendix.readme appendix.version answers.readme queries.readme variants.readme
-REFERENCE=reference/[tcR]*
-REFERENCE_DATA=referenceData/[13]*
-SCRIPTS= check55.sh column_split.sh dop.sh gen_tasks.sh last_row.sh load_balance.sh new55.sh check_dirs.sh
-ALLSRC=$(DBGENSRC) $(REFERENCE) $(QSRC) $(SCRIPTS)
+REFERENCE=reference/[cR]*
+REFERENCE_DATA=reference_data/[13]*
+ALLSRC=$(DBGENSRC) $(REFERENCE) $(QSRC) update_release.sh data_distribution.sql
 JUNK  = 
 #
-all: $(PROGS)
+all: update_release $(PROGS)
 $(PROG1): $(OBJ1) $(SETS) 
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ1) $(LIBS)
 $(PROG2): permute.h $(OBJ2) 
@@ -184,15 +176,18 @@ lint:
 	lint $(CFLAGS) -u -x -wO -Ma -p $(SRC2)
 
 tar: $(ALLSRC) 
-	tar cvhf - $(ALLSRC) --exclude .svn\*/\* |gzip - > tpch_${VERSION}_${RELEASE}_${PATCH}.tar.gz
-	tar cvhf - $(REFERENCE_DATA) --exclude .svn\*/\* |gzip - > reference_${VERSION}_${RELEASE}_${PATCH}.tar.gz
+	tar cvzhf tpch_skew_${VERSION}_${RELEASE}_${PATCH}.tar.gz $(ALLSRC) 
+	tar cvzhf reference_skew_${VERSION}_${RELEASE}_${PATCH}.tar.gz $(REFERENCE_DATA) 
 zip: $(ALLSRC)
-	zip -r tpch_${VERSION}_${RELEASE}_${PATCH}.zip $(ALLSRC) -x *.svn*
-	zip -r reference_${VERSION}_${RELEASE}_${PATCH}.zip $(REFERENCE_DATA) -x *.svn*
-release: 
+	zip -r tpch_skew_${VERSION}_${RELEASE}_${PATCH}.zip $(ALLSRC) 
+	zip -r reference_skew_${VERSION}_${RELEASE}_${PATCH}.zip $(REFERENCE_DATA) 
+release: update_release
 	make -f makefile.suite tar
 	make -f makefile.suite zip
 	( cd tests; sh test_list.sh `date '+%Y%m%d'` )
 rnd$(OBJ): rnd.h
 $(OBJ1): $(HDR1)
 $(OBJ2): dss.h tpcd.h config.h rng64.h release.h
+update_release:
+	chmod 755 update_release.sh
+	./update_release.sh ${VERSION} ${RELEASE} ${PATCH}
